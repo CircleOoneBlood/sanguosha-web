@@ -82,10 +82,19 @@ export default function Room() {
         </div>
 
         {/* 操作按钮 */}
-        <div className="flex gap-3">
-          <button className="btn-secondary flex-1" onClick={leaveRoom}>
-            离开房间
+        <div className="flex gap-2">
+          <button className="btn-secondary px-3 py-2 text-sm" onClick={leaveRoom}>
+            离开
           </button>
+          {isHost && currentRoom.players.length < currentRoom.maxPlayers && (
+            <button
+              className="px-3 py-2 text-sm bg-purple-900/40 border border-purple-700/50 text-purple-300
+                         rounded-lg hover:bg-purple-900/60 transition-colors"
+              onClick={() => getSocket().emit("room:add_robot", { roomId: currentRoom.id })}
+            >
+              + 机器人
+            </button>
+          )}
           <button
             className={`flex-1 font-bold py-2 px-4 rounded-lg border transition-all ${
               myPlayer?.isReady
@@ -100,7 +109,7 @@ export default function Room() {
 
         {isHost && (
           <p className="text-center text-parchment/40 text-xs mt-3">
-            所有玩家准备后游戏自动开始
+            所有玩家准备后游戏自动开始 · 可添加 AI 机器人填充空位
           </p>
         )}
       </div>

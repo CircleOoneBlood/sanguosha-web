@@ -1,8 +1,10 @@
 node_modules
 dist
 dist-server
-.env
+# 本地覆盖文件（含 secrets）不提交
 .env.local
 .env.*.local
+# 默认 .env 不提交（含 secrets 时）
+.env
 *.log
 .DS_Store

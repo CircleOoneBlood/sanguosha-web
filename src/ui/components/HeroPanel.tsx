@@ -4,6 +4,7 @@ interface Props {
   player: Player;
   isCurrentTurn: boolean;
   compact?: boolean;
+  isTargetable?: boolean;
 }
 
 const kingdomColor: Record<string, string> = {
@@ -17,7 +18,7 @@ const kingdomText: Record<string, string> = {
   wei: "text-wei", shu: "text-shu", wu: "text-wu", qun: "text-qun",
 };
 
-export default function HeroPanel({ player, isCurrentTurn, compact = false }: Props) {
+export default function HeroPanel({ player, isCurrentTurn, compact = false, isTargetable = false }: Props) {
   const kingdom = player.hero.kingdom;
   const hpPercent = Math.max(0, (player.hp / player.maxHp) * 100);
   const isDanger = player.hp <= 1;
@@ -26,7 +27,8 @@ export default function HeroPanel({ player, isCurrentTurn, compact = false }: Pr
     <div
       className={`panel border ${kingdomColor[kingdom]} ${
         isCurrentTurn ? "ring-1 ring-gold/60" : ""
-      } ${compact ? "p-2 min-w-[100px]" : "p-3 min-w-[140px]"} ${
+      } ${isTargetable ? "ring-2 ring-red-400/80 shadow-lg shadow-red-900/50 animate-pulse" : ""}
+      ${compact ? "p-2 min-w-[100px]" : "p-3 min-w-[140px]"} ${
         !player.isAlive ? "opacity-40 grayscale" : ""
       } transition-all`}
     >

@@ -1,28 +1,44 @@
 version: "3.9"
 
+# ── 生产/测试环境 ──────────────────────────────────
+# 用法：
+#   docker compose up --build          # 启动
+#   docker compose up --build -d       # 后台启动
+#
+# 访问：http://localhost (80端口)
+# 健康检查：http://localhost/api/health
+#
+# 架构：
+#   nginx:80 ─┬─ /          → 静态文件 (dist/)
+#             ├─ /socket.io/ → app:3001 (WebSocket)
+#             └─ /api/       → app:3001 (HTTP)
+
 services:
-  # 生产/测试模式：单容器（前端静态文件由 Express 托管）
+  # Node.js 游戏服务端
   app:
-    build: .
-    ports:
-      - "3001:3001"
+    build:
+      context: .
+      target: runner
     environment:
       - NODE_ENV=production
       - PORT=3001
+    expose:
+      - "3001"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  # 开发模式：热重载（用 dev profile 启动）
-  app-dev:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - .:/app
-      - /app/node_modules
+  # Nginx 静态文件 + 反代
+  nginx:
+    build:
+      context: .
+      target: nginx-dist
     ports:
-      - "5173:5173"  # Vite
-      - "3001:3001"  # Server
-    environment:
-      - NODE_ENV=development
-    command: npm run dev
-    profiles:
-      - dev
+      - "80:80"
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped

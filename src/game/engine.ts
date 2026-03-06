@@ -98,6 +98,8 @@ export interface GameContext {
   state: GameState;
   emit: (event: string, data: unknown) => void;
   waitForResponse: (req: Omit<ResponseRequest, "resolve">) => Promise<ResponseResult>;
+  // 等待玩家主动结束某阶段（出牌/弃牌）
+  waitForPhaseEnd: (playerId: string, phase: "play" | "discard", timeout: number) => Promise<void>;
 }
 
 // ═══════════════════════════════════════════════
@@ -307,15 +309,33 @@ export class GameEngine {
     }
 
     this.ctx.emit("phase:play", { playerId: p.id });
-    // 实际出牌由前端事件驱动（game:play_card）
-    // 引擎等待 phase:play:end 信号
+    // 等待玩家结束出牌阶段（发 game:end_play 事件），最长 5 分钟
+    await this.ctx.waitForPhaseEnd(p.id, "play", 5 * 60 * 1000);
   }
 
   async discardPhase(player?: Player): Promise<void> {
     const p = player ?? this._currentPlayer();
     this.ctx.state.phase = "discard";
-    this.ctx.emit("phase:discard", { playerId: p.id, handCount: p.hand.length, hp: p.hp });
-    // 实际弃牌由前端事件驱动（game:discard）
+
+    const excess = p.hand.length - p.hp;
+    if (excess <= 0) {
+      // 手牌不超过体力值，无需弃牌
+      this.ctx.emit("phase:discard:skip", { playerId: p.id });
+      return;
+    }
+
+    this.ctx.emit("phase:discard", { playerId: p.id, handCount: p.hand.length, hp: p.hp, mustDiscard: excess });
+    // 等待玩家弃完足够的牌，最长 60 秒
+    await this.ctx.waitForPhaseEnd(p.id, "discard", 60 * 1000);
+
+    // 超时兜底：自动弃置末尾多余手牌
+    const remaining = p.hand.length - p.hp;
+    if (remaining > 0) {
+      const autoDiscard = p.hand.splice(p.hand.length - remaining, remaining);
+      this.ctx.state.discard.push(...autoDiscard);
+      this.ctx.emit("card:discard", { cardIds: autoDiscard.map(c => c.id) });
+      this.log(`${p.name} 超时，自动弃置 ${remaining} 张牌`);
+    }
   }
 
   private async endPhase(player: Player): Promise<void> {
@@ -378,16 +398,31 @@ export class GameEngine {
     // 出牌阶段检查
     if (this.ctx.state.phase !== "play" && !card.isDelayed) return false;
 
-    if (card.name === CARD_NAMES.SLASH) {
-      // 每回合只能出一次杀（诸葛连弩除外）
+    const isSlash = card.name === CARD_NAMES.SLASH;
+    const isDodge = card.name === CARD_NAMES.DODGE;
+    // 龙胆：闪可当杀，杀可当闪
+    const hasLongdan = player.hero.skills.some(s => s.id === "longdan");
+    const effectivelySlash = isSlash || (isDodge && hasLongdan);
+
+    if (effectivelySlash) {
       const hasZhugeBow = (player.equips.weapon as ExtCard)?.name === CARD_NAMES.ZHUGE_BOW;
       if (player.slashCount >= 1 && !hasZhugeBow) return false;
       if (targets.length !== 1) return false;
-      // 检查距离
-      if (!this._inAttackRange(player, targets[0])) return false;
+      // 空城检查：目标无手牌时免疫杀
+      const target = targets[0];
+      const targetHasKongcheng = target.hero.skills.some(s => s.id === "kongcheng");
+      if (targetHasKongcheng && target.hand.length === 0) return false;
+      if (!this._inAttackRange(player, target)) return false;
     }
 
-    if (card.name === CARD_NAMES.DUEL && targets.length !== 1) return false;
+    if (card.name === CARD_NAMES.DUEL) {
+      if (targets.length !== 1) return false;
+      // 空城检查
+      const target = targets[0];
+      const targetHasKongcheng = target.hero.skills.some(s => s.id === "kongcheng");
+      if (targetHasKongcheng && target.hand.length === 0) return false;
+    }
+
     if (card.name === CARD_NAMES.DISMANTLE && targets.length !== 1) return false;
     if (card.name === CARD_NAMES.STEAL && targets.length !== 1) return false;
 
@@ -395,9 +430,14 @@ export class GameEngine {
   }
 
   private async _resolveBasicCard(player: Player, card: ExtCard, targets: Player[]): Promise<void> {
-    if (card.name === CARD_NAMES.SLASH) {
+    // 龙胆：闪当杀用
+    const hasLongdan = player.hero.skills.some(s => s.id === "longdan");
+    const isEffectiveSlash = card.name === CARD_NAMES.SLASH ||
+      (hasLongdan && card.name === CARD_NAMES.DODGE);
+
+    if (isEffectiveSlash) {
       player.slashCount++;
-      await this.resolveSlash(player, targets[0], card);
+      await this.resolveSlash(player, targets[0], card, card);
     } else if (card.name === CARD_NAMES.PEACH) {
       await this.recoverHp(player, 1);
     } else if (card.name === CARD_NAMES.WINE) {
@@ -585,7 +625,7 @@ export class GameEngine {
   // 杀与伤害
   // ──────────────────────────────
 
-  async resolveSlash(source: Player, target: Player, card: Card): Promise<void> {
+  async resolveSlash(source: Player, target: Player, card: Card, sourceCard?: Card): Promise<void> {
     this.log(`${source.name} 对 ${target.name} 出杀`);
 
     // 等待目标出闪
@@ -599,14 +639,20 @@ export class GameEngine {
     });
 
     if (result.cardId) {
-      // 目标出了闪
       const idx = target.hand.findIndex(c => c.id === result.cardId);
-      if (idx !== -1 && isCardName(target.hand[idx], CARD_NAMES.DODGE)) {
-        const dodge = target.hand.splice(idx, 1)[0];
-        this.ctx.state.discard.push(dodge);
-        this.log(`${target.name} 使用了闪`);
-        this.ctx.emit("slash:dodged", { sourceId: source.id, targetId: target.id });
-        return;
+      if (idx !== -1) {
+        const responseCard = target.hand[idx] as ExtCard;
+        // 龙胆：杀可作闪
+        const hasLongdan = target.hero.skills.some(s => s.id === "longdan");
+        const isDodge = isCardName(responseCard, CARD_NAMES.DODGE);
+        const isSlashAsDodge = hasLongdan && isCardName(responseCard, CARD_NAMES.SLASH);
+        if (isDodge || isSlashAsDodge) {
+          const used = target.hand.splice(idx, 1)[0];
+          this.ctx.state.discard.push(used);
+          this.log(`${target.name} 使用了${isSlashAsDodge ? "杀（龙胆）" : "闪"}`);
+          this.ctx.emit("slash:dodged", { sourceId: source.id, targetId: target.id });
+          return;
+        }
       }
     }
 
@@ -616,7 +662,7 @@ export class GameEngine {
       dmg = 2;
       delete source.flags["wine_boost"];
     }
-    await this.dealDamage(source, target, dmg);
+    await this.dealDamage(source, target, dmg, "normal", sourceCard);
   }
 
   async dealDamage(
@@ -624,6 +670,7 @@ export class GameEngine {
     target: Player,
     amount: number,
     type: DamageType = "normal",
+    sourceCard?: Card,
   ): Promise<void> {
     if (!target.isAlive) return;
 
@@ -638,8 +685,12 @@ export class GameEngine {
     this.log(`${target.name} 受到 ${amount} 点${type === "fire" ? "火焰" : type === "thunder" ? "雷电" : ""}伤害，剩余 ${target.hp}/${target.maxHp} 血`);
     this.ctx.emit("player:damage", { targetId: target.id, amount, type, hp: target.hp });
 
-    // 触发曹操奸雄等被动
-    if (source) this.triggerSkills("on_deal_damage", source, { target, amount, type });
+    // 触发被动技能
+    if (source) {
+      // 奸雄：把来源牌存入 flags 供技能读取
+      if (sourceCard) source.flags["jianyiong_card"] = sourceCard;
+      this.triggerSkills("on_deal_damage", source, { target, amount, type, card: sourceCard });
+    }
     this.triggerSkills("on_take_damage", target, { source, amount, type });
 
     // 濒死检查
@@ -792,12 +843,16 @@ export class GameEngine {
   }
 
   // ──────────────────────────────
-  // 技能触发框架（留给各武将实现）
+  // 技能触发框架
   // ──────────────────────────────
 
-  private triggerSkills(event: string, player: Player, data?: unknown): void {
+  // 带事件数据的技能上下文
+  skillEvent: SkillEvent | null = null;
+
+  triggerSkills(event: SkillEventType, player: Player, data?: SkillEventData): void {
+    this.skillEvent = { type: event, data: data ?? {} };
     for (const skill of player.hero.skills) {
-      if (skill.type === "passive" && skill.execute) {
+      if (skill.execute) {
         try {
           skill.execute(this.ctx, player);
         } catch {
@@ -805,6 +860,16 @@ export class GameEngine {
         }
       }
     }
+    this.skillEvent = null;
+  }
+
+  // 供技能内部调用：检查当前触发事件类型
+  isSkillEvent(type: SkillEventType): boolean {
+    return this.skillEvent?.type === type;
+  }
+
+  getSkillEventData(): SkillEventData {
+    return this.skillEvent?.data ?? {};
   }
 
   // ──────────────────────────────
@@ -909,6 +974,32 @@ export class GameEngine {
     this.ctx.state.log.push(entry);
     this.ctx.emit("game:log", { message: msg });
   }
+}
+
+// ═══════════════════════════════════════════════
+// 技能事件系统
+// ═══════════════════════════════════════════════
+
+export type SkillEventType =
+  | "on_start_phase"
+  | "on_end_phase"
+  | "on_deal_damage"
+  | "on_take_damage"
+  | "on_kill"
+  | "on_draw";
+
+export interface SkillEventData {
+  target?: Player;
+  source?: Player | null;
+  amount?: number;
+  type?: DamageType;
+  card?: Card;
+  count?: number;
+}
+
+export interface SkillEvent {
+  type: SkillEventType;
+  data: SkillEventData;
 }
 
 // ═══════════════════════════════════════════════

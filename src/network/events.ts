@@ -37,7 +37,8 @@ export interface ServerToClientEvents {
   "phase:draw:skip": (data: { playerId: string }) => void;
   "phase:play": (data: { playerId: string }) => void;
   "phase:play:skip": (data: { playerId: string }) => void;
-  "phase:discard": (data: { playerId: string; handCount: number; hp: number }) => void;
+  "phase:discard": (data: { playerId: string; handCount: number; hp: number; mustDiscard: number }) => void;
+  "phase:discard:skip": (data: { playerId: string }) => void;
   "phase:end": (data: { playerId: string }) => void;
 
   // 牌操作
@@ -78,11 +79,13 @@ export interface ClientToServerEvents {
   "room:join": (data: { roomId: string; userId: string; playerName: string }) => void;
   "room:ready": (data: { roomId: string }) => void;
   "room:leave": (data: { roomId: string }) => void;
+  "room:add_robot": (data: { roomId: string }) => void;
 
   // 游戏
   "game:play_card": (data: { roomId: string; cardId: string; targetIds: string[] }) => void;
   "game:end_play": (data: { roomId: string }) => void;
   "game:discard": (data: { roomId: string; cardIds: string[] }) => void;
+  "game:discard_done": (data: { roomId: string }) => void;
   "game:respond": (data: { roomId: string; requestId: string; cardId?: string }) => void;
   "game:dismantle_select": (data: { roomId: string; requestId: string; cardId: string }) => void;
 
