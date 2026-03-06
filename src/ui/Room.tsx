@@ -53,7 +53,7 @@ export default function Room() {
           <div className="space-y-2">
             {currentRoom.players.map((player, i) => (
               <div
-                key={player.socketId}
+                key={player.userId}
                 className="flex items-center justify-between p-2 bg-black/30 rounded-lg"
               >
                 <div className="flex items-center gap-2">
@@ -64,6 +64,9 @@ export default function Room() {
                   )}
                   {player.userId === userId && (
                     <span className="text-xs text-jade bg-jade/10 px-1.5 py-0.5 rounded">你</span>
+                  )}
+                  {player.userId.startsWith("robot_") && (
+                    <span className="text-xs text-purple-400 bg-purple-400/10 px-1.5 py-0.5 rounded">AI</span>
                   )}
                 </div>
                 <span className={`text-sm font-semibold ${player.isReady ? "text-jade" : "text-parchment/40"}`}>

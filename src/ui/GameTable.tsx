@@ -24,7 +24,7 @@ const DELAYED_TRICKS = new Set([
 ]);
 
 export default function GameTable() {
-  const { gameState, myPlayerId, pendingRequest } = useStore();
+  const { gameState, myPlayerId, pendingRequest, roomId } = useStore();
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [selectingTarget, setSelectingTarget] = useState(false);
   const [discardSelected, setDiscardSelected] = useState<Set<string>>(new Set());
@@ -54,7 +54,6 @@ export default function GameTable() {
   const isPlayPhase = isMyTurn && gameState.phase === "play";
   const isDiscardPhase = isMyTurn && gameState.phase === "discard";
 
-  const roomId = gameState.id;
   const socket = getSocket();
 
   // 点击手牌

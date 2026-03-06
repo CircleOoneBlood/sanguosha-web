@@ -27,7 +27,11 @@ interface AppStore {
   setGameState: (state: GameState | null) => void;
   patchGameState: (partial: Partial<GameState>) => void;
 
-  // 我的 Player ID（对应 GameState.players[].id）
+  // 当前房间 ID（房间码，如 "ABC123"，游戏中也需要用它发 socket 事件）
+  roomId: string;
+  setRoomId: (id: string) => void;
+
+  // 我的 Player ID（对应 GameState.players[].id，等于 userId）
   myPlayerId: string;
   setMyPlayerId: (id: string) => void;
 
@@ -67,6 +71,9 @@ export const useStore = create<AppStore>((set, get) => ({
     const prev = get().gameState;
     if (prev) set({ gameState: { ...prev, ...partial } });
   },
+
+  roomId: "",
+  setRoomId: (roomId) => set({ roomId }),
 
   myPlayerId: "",
   setMyPlayerId: (myPlayerId) => set({ myPlayerId }),
