@@ -38,6 +38,18 @@ interface AppStore {
   // 待响应请求
   pendingRequest: PendingRequest | null;
   setPendingRequest: (req: PendingRequest | null) => void;
+
+  // 技能触发特效队列
+  skillToasts: SkillToast[];
+  addSkillToast: (toast: SkillToast) => void;
+  removeSkillToast: (id: string) => void;
+}
+
+export interface SkillToast {
+  id: string;
+  playerId: string;
+  playerName: string;
+  skillName: string;
 }
 
 export interface PendingRequest {
@@ -80,4 +92,8 @@ export const useStore = create<AppStore>((set, get) => ({
 
   pendingRequest: null,
   setPendingRequest: (pendingRequest) => set({ pendingRequest }),
+
+  skillToasts: [],
+  addSkillToast: (toast) => set(s => ({ skillToasts: [...s.skillToasts, toast] })),
+  removeSkillToast: (id) => set(s => ({ skillToasts: s.skillToasts.filter(t => t.id !== id) })),
 }));

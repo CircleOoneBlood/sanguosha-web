@@ -55,6 +55,9 @@ export interface ServerToClientEvents {
   "player:equip": (data: { playerId: string; slot: string; cardId: string }) => void;
   "player:wine": (data: { playerId: string }) => void;
 
+  // 技能
+  "skill:trigger": (data: { skillId: string; playerId: string }) => void;
+
   // 判定
   "judge:flip": (data: { playerId: string; delayCardId: string; judgeCardId: string }) => void;
 
