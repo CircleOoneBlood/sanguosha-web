@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-ink-dark text-parchment font-sans;
+    background-image: radial-gradient(ellipse at center, #3d2410 0%, #1a0d06 100%);
+    min-height: 100vh;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-gold text-ink-dark font-bold rounded-lg
+           hover:brightness-110 active:brightness-90 transition-all duration-150
+           border border-yellow-600;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-transparent text-parchment font-semibold rounded-lg
+           hover:bg-white/10 active:bg-white/5 transition-all duration-150
+           border border-parchment/40;
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 bg-ink-red text-parchment font-bold rounded-lg
+           hover:brightness-110 active:brightness-90 transition-all duration-150
+           border border-red-800;
+  }
+
+  .card-container {
+    @apply relative rounded-lg overflow-hidden shadow-lg;
+    aspect-ratio: 5 / 7;
+  }
+
+  .panel {
+    @apply bg-black/40 border border-parchment/20 rounded-xl backdrop-blur-sm;
+  }
+}
+
+/* 牌花色颜色 */
+.suit-red { color: #e74c3c; }
+.suit-black { color: #e8dcc8; }
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-parchment/20 rounded-full; }
