@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  # 生产/测试模式：单容器（前端静态文件由 Express 托管）
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    restart: unless-stopped
+
+  # 开发模式：热重载（用 dev profile 启动）
+  app-dev:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"  # Vite
+      - "3001:3001"  # Server
+    environment:
+      - NODE_ENV=development
+    command: npm run dev
+    profiles:
+      - dev
